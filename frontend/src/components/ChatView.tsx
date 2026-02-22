@@ -14,6 +14,7 @@ export default function ChatView() {
     const [isLoading, setIsLoading] = useState(false);
     const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
     const [editContent, setEditContent] = useState('');
+    const [isSystemPromptModalOpen, setIsSystemPromptModalOpen] = useState(false);
     const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
     // Fetch models and providers on mount
@@ -57,6 +58,10 @@ export default function ChatView() {
 
     const handleRegenerate = async (messageId: number) => {
         if (!id) return;
+
+        // Optimistically clear the message content and hide its metadata while regenerating
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: '', generation_metadata: null } : m));
+
         setIsLoading(true);
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -81,6 +86,16 @@ export default function ChatView() {
 
     const submitEdit = async (messageId: number) => {
         if (!id || selectedModels.length === 0) return;
+
+        // Optimistically update UI: update the edited message text and remove all subsequent messages immediately
+        setMessages(prev => {
+            const msgIndex = prev.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return prev;
+            const updated = [...prev];
+            updated[msgIndex] = { ...updated[msgIndex], content: editContent };
+            return updated.slice(0, msgIndex + 1);
+        });
+
         setEditingMessageId(null);
         setIsLoading(true);
         try {
@@ -194,16 +209,55 @@ export default function ChatView() {
                     })}
                 </div>
 
-                <div className="mt-2">
-                    <label className="text-xs font-semibold text-gray-500 mb-1 block">System Prompt</label>
-                    <textarea
-                        className="w-full bg-[#0f1115] border border-[#2d3139] rounded p-2 text-sm focus:outline-none focus:border-blue-500 text-gray-300 resize-none"
-                        rows={2}
-                        value={systemPrompt}
-                        onChange={e => setSystemPrompt(e.target.value)}
-                    />
+                {/* System Prompt Trigger */}
+                <div className="flex flex-col gap-1 mt-2">
+                    <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">System Prompt</span>
+                    <button
+                        onClick={() => setIsSystemPromptModalOpen(true)}
+                        className="text-left text-sm bg-[#0f1115] text-gray-300 p-2 rounded focus:outline-none border border-[#2d3139] hover:border-blue-500 hover:text-white transition-colors truncate"
+                    >
+                        {systemPrompt.length > 80 ? systemPrompt.substring(0, 80) + '...' : systemPrompt}
+                    </button>
                 </div>
             </div>
+
+            {/* System Prompt Modal Overlay */}
+            {isSystemPromptModalOpen && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-[#16181d] rounded-2xl w-full max-w-4xl border border-[#2d3139] shadow-2xl flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-[#2d3139] flex justify-between items-center bg-[#1e2128] rounded-t-2xl">
+                            <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                                <Settings2 size={18} className="text-blue-400" />
+                                Edit System Prompt
+                            </h3>
+                            <button
+                                onClick={() => setIsSystemPromptModalOpen(false)}
+                                className="text-gray-400 hover:text-white transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-6 flex-1 overflow-y-auto">
+                            <p className="text-sm text-gray-400 mb-4">
+                                This prompt gives the models their persona and instructions. It applies to all messages in this conversation.
+                            </p>
+                            <textarea
+                                className="w-full bg-[#0f1115] text-white p-4 rounded-xl resize-y focus:outline-none border border-[#2d3139] focus:border-blue-500 min-h-[300px] h-[50vh] transition-colors"
+                                value={systemPrompt}
+                                onChange={e => setSystemPrompt(e.target.value)}
+                            />
+                        </div>
+                        <div className="p-4 border-t border-[#2d3139] flex justify-end gap-3 bg-[#1e2128] rounded-b-2xl">
+                            <button
+                                onClick={() => setIsSystemPromptModalOpen(false)}
+                                className="px-5 py-2 rounded text-sm bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -216,14 +270,25 @@ export default function ChatView() {
                         const isUser = msg.role === 'user';
                         return (
                             <div key={i} className={`flex max-w-4xl mx-auto mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`p-4 rounded-2xl max-w-[85%] relative ${isUser ? 'bg-blue-600 text-white shadow-md' : 'bg-[#1e2128] text-gray-200 border border-[#2d3139]'}`}>
+                                <div className={`p-4 rounded-2xl relative ${editingMessageId === msg.id ? 'w-full max-w-3xl' : 'max-w-[85%]'} ${isUser ? 'bg-blue-600 text-white shadow-md' : 'bg-[#1e2128] text-gray-200 border border-[#2d3139]'}`}>
                                     {editingMessageId === msg.id ? (
                                         <div className="flex flex-col gap-2">
                                             <textarea
-                                                className="w-full bg-[#0f1115] text-white p-2 rounded resize-none focus:outline-none border border-blue-400"
-                                                rows={3}
+                                                ref={el => {
+                                                    if (el && !el.dataset.resized) {
+                                                        el.style.height = 'auto';
+                                                        el.style.height = el.scrollHeight + 'px';
+                                                        el.dataset.resized = 'true';
+                                                    }
+                                                }}
+                                                className="w-full bg-[#0f1115] text-white p-3 rounded resize-y focus:outline-none border border-blue-400 min-h-[120px] max-h-[75vh]"
+                                                rows={5}
                                                 value={editContent}
-                                                onChange={e => setEditContent(e.target.value)}
+                                                onChange={e => {
+                                                    setEditContent(e.target.value);
+                                                    e.target.style.height = 'auto';
+                                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                                }}
                                             />
                                             <div className="flex justify-end gap-2 mt-2">
                                                 <button onClick={() => setEditingMessageId(null)} className="text-xs text-gray-300 hover:text-white transition-colors">Cancel</button>
@@ -239,9 +304,9 @@ export default function ChatView() {
                                             <>
                                                 <span className="text-blue-200 opacity-70">You</span>
                                                 {!editingMessageId && (
-                                                    <div className="flex gap-3 ml-auto opacity-0 hover:opacity-100 transition-opacity absolute -bottom-6 right-0">
-                                                        <button onClick={() => handleCopy(msg.content)} className="text-gray-400 hover:text-white transition-colors flex items-center gap-1" title="Copy"><Copy size={12} /> Copy</button>
-                                                        <button onClick={() => { setEditingMessageId(msg.id); setEditContent(msg.content); }} className="text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1" title="Edit"><Edit2 size={12} /> Edit</button>
+                                                    <div className="flex gap-3 ml-auto opacity-70">
+                                                        <button onClick={() => handleCopy(msg.content)} className="text-blue-100 hover:text-white transition-colors flex items-center gap-1 cursor-pointer" title="Copy"><Copy size={12} /> Copy</button>
+                                                        <button onClick={() => { setEditingMessageId(msg.id); setEditContent(msg.content); }} className="text-blue-100 hover:text-white transition-colors flex items-center gap-1 cursor-pointer" title="Edit"><Edit2 size={12} /> Edit</button>
                                                     </div>
                                                 )}
                                             </>
@@ -273,8 +338,8 @@ export default function ChatView() {
                                                     </div>
                                                 )}
                                                 <div className="flex items-center gap-3 mt-1 pt-2 border-t border-[#2d3139]/50 text-xs w-full">
-                                                    <button onClick={() => handleCopy(msg.content)} className="text-gray-400 hover:text-white transition-colors flex items-center gap-1" title="Copy"><Copy size={12} /> Copy</button>
-                                                    <button onClick={() => handleRegenerate(msg.id)} disabled={isLoading} className="text-gray-400 hover:text-blue-400 disabled:opacity-50 transition-colors flex items-center gap-1 ml-auto" title="Regenerate"><RotateCw size={12} /> Regenerate</button>
+                                                    <button onClick={() => handleCopy(msg.content)} className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer" title="Copy"><Copy size={12} /> Copy</button>
+                                                    <button onClick={() => handleRegenerate(msg.id)} disabled={isLoading} className="text-gray-400 hover:text-blue-400 disabled:opacity-50 transition-colors flex items-center gap-1 ml-auto cursor-pointer" title="Regenerate"><RotateCw size={12} /> Regenerate</button>
                                                 </div>
                                             </div>
                                         )}
@@ -283,6 +348,15 @@ export default function ChatView() {
                             </div>
                         );
                     })
+                )}
+                {isLoading && (
+                    <div className="flex max-w-4xl mx-auto mb-6 justify-start">
+                        <div className="p-4 rounded-2xl max-w-[85%] bg-[#1e2128] border border-[#2d3139] flex items-center gap-1 h-10 px-5">
+                            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                        </div>
+                    </div>
                 )}
                 <div ref={endOfMessagesRef} />
             </div>
