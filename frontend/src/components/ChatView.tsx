@@ -10,15 +10,21 @@ export default function ChatView() {
     const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
     const [selectedModels, setSelectedModels] = useState<number[]>([]);
     const [allModels, setAllModels] = useState<any[]>([]);
+    const [providers, setProviders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
-    // Fetch models on mount
+    // Fetch models and providers on mount
     useEffect(() => {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        fetch(`${apiUrl}/api/models/`)
-            .then(res => res.json())
-            .then(data => setAllModels(data || []))
+        Promise.all([
+            fetch(`${apiUrl}/api/models/`).then(res => res.json()),
+            fetch(`${apiUrl}/api/providers/`).then(res => res.json())
+        ])
+            .then(([modelsData, providersData]) => {
+                setAllModels(modelsData || []);
+                setProviders(providersData || []);
+            })
             .catch(err => console.error(err));
     }, []);
 
@@ -100,23 +106,34 @@ export default function ChatView() {
                     <h2 className="text-sm font-medium">Model Configuration</h2>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
                     {allModels.length === 0 && <span className="text-xs text-red-400">No models available. Add them in Settings.</span>}
-                    {allModels.map(m => (
-                        <label key={m.id} className="flex items-center gap-2 bg-[#2d3139] px-3 py-1.5 rounded-full text-xs cursor-pointer hover:bg-[#3b414d] transition-colors border border-transparent hover:border-gray-500">
-                            <input
-                                type="checkbox"
-                                className="accent-blue-500 rounded bg-[#16181d] border-gray-600 w-3 h-3"
-                                checked={selectedModels.includes(m.id)}
-                                onChange={(e) => {
-                                    if (e.target.checked) setSelectedModels([...selectedModels, m.id]);
-                                    else setSelectedModels(selectedModels.filter(id => id !== m.id));
-                                }}
-                            />
-                            <span className="font-medium">{m.name || m.model_id}</span>
-                            {m.is_reasoning && <span title="Reasoning Model"><Cpu size={12} className="text-purple-400 ml-1" /></span>}
-                        </label>
-                    ))}
+                    {providers.map(p => {
+                        const pModels = allModels.filter(m => m.provider_id === p.id && m.enabled !== false);
+                        if (pModels.length === 0) return null;
+                        return (
+                            <div key={p.id} className="flex flex-col gap-1.5">
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{p.name}</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {pModels.map(m => (
+                                        <label key={m.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer transition-colors border ${selectedModels.includes(m.id) ? 'bg-blue-600/20 border-blue-500 text-blue-100' : 'bg-[#2d3139] border-transparent hover:border-gray-500 text-gray-300 hover:bg-[#3b414d]'}`}>
+                                            <input
+                                                type="checkbox"
+                                                className="hidden"
+                                                checked={selectedModels.includes(m.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedModels([...selectedModels, m.id]);
+                                                    else setSelectedModels(selectedModels.filter(id => id !== m.id));
+                                                }}
+                                            />
+                                            <span className="font-medium">{m.name || m.model_id}</span>
+                                            {m.is_reasoning && <span title="Reasoning Model"><Cpu size={12} className={selectedModels.includes(m.id) ? 'text-purple-300' : 'text-purple-400'} /></span>}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
 
                 <div className="mt-2">
@@ -146,9 +163,12 @@ export default function ChatView() {
                                     <div className="mt-3 pt-3 flex flex-wrap gap-3 border-t border-[#2d3139]/50 text-xs">
                                         {msg.generation_metadata.map((meta: any, mi: number) => {
                                             const model = allModels.find(m => m.id === meta.model_id);
+                                            const provider = model ? providers.find(p => p.id === model.provider_id) : null;
                                             return (
                                                 <div key={mi} className="bg-[#16181d] rounded px-2 py-1 flex items-center gap-3 border border-[#2d3139]">
-                                                    <span className="font-semibold text-blue-400">{model?.name || 'Model'}</span>
+                                                    <span className="font-semibold text-blue-400">
+                                                        {provider ? `${provider.name} / ` : ''}{model?.name || 'Model'}
+                                                    </span>
                                                     <span className="flex items-center gap-1 text-gray-400"><Clock size={10} /> {(meta.time_to_first_token || 0).toFixed(2)}s TTFT</span>
                                                     <span className="flex items-center gap-1 text-gray-400"><Zap size={10} /> {(meta.tokens_per_second || 0).toFixed(1)} t/s</span>
                                                     <span className="text-gray-400">{meta.output_tokens} out tokens</span>

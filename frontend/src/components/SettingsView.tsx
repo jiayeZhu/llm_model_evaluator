@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Trash2, Server } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Server, Eye, EyeOff } from 'lucide-react';
 
 export default function SettingsView() {
     const [providers, setProviders] = useState<any[]>([]);
@@ -58,6 +58,16 @@ export default function SettingsView() {
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
             await fetch(`${apiUrl}/api/providers/${id}`, { method: 'DELETE' });
+            fetchSettings();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const toggleModel = async (modelId: number) => {
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            await fetch(`${apiUrl}/api/models/${modelId}/toggle`, { method: 'PUT' });
             fetchSettings();
         } catch (e) {
             console.error(e);
@@ -144,8 +154,13 @@ export default function SettingsView() {
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                     {providerModels.length === 0 && <span className="text-sm text-gray-500 col-span-full italic">No models found. Try syncing.</span>}
                                     {providerModels.map(m => (
-                                        <div key={m.id} className="bg-[#0f1115] border border-[#2d3139] rounded-lg p-3 flex flex-col justify-between group">
-                                            <div className="text-sm font-medium truncate text-gray-200" title={m.name || m.model_id}>{m.name || m.model_id}</div>
+                                        <div key={m.id} className={`bg-[#0f1115] border border-[#2d3139] rounded-lg p-3 flex flex-col justify-between group transition-all ${m.enabled === false ? 'opacity-50 grayscale' : ''}`}>
+                                            <div className="flex justify-between items-start gap-2">
+                                                <div className="text-sm font-medium truncate text-gray-200" title={m.name || m.model_id}>{m.name || m.model_id}</div>
+                                                <button onClick={() => toggleModel(m.id)} className="text-gray-500 hover:text-white transition-colors" title={m.enabled === false ? "Enable model" : "Disable model"}>
+                                                    {m.enabled === false ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                </button>
+                                            </div>
                                             <div className="flex items-center justify-between mt-3">
                                                 <span className="text-[10px] text-gray-500 truncate">{m.model_id}</span>
                                                 {m.is_reasoning && <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded box-border font-medium">Reasoning</span>}

@@ -21,6 +21,7 @@ class Model(Base):
     model_id = Column(String, index=True) # e.g., 'gpt-4-turbo'
     name = Column(String) # For display e.g., 'GPT-4 Turbo'
     is_reasoning = Column(Boolean, default=False)
+    enabled = Column(Boolean, default=True)
     
     provider = relationship("Provider", back_populates="models")
     generation_metadata = relationship("GenerationMetadata", back_populates="model", cascade="all, delete-orphan")

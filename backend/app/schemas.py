@@ -22,6 +22,7 @@ class ModelBase(BaseModel):
     model_id: str
     name: str
     is_reasoning: bool = False
+    enabled: bool = True
 
 class ModelCreate(ModelBase):
     provider_id: int

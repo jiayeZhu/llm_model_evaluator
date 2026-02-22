@@ -54,6 +54,16 @@ def delete_model(model_id: int, db: Session = Depends(get_db)):
     db.commit()
     return model
 
+@router.put("/models/{model_id}/toggle", response_model=schemas.Model)
+def toggle_model(model_id: int, db: Session = Depends(get_db)):
+    model = db.query(models.Model).filter(models.Model.id == model_id).first()
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    model.enabled = not model.enabled
+    db.commit()
+    db.refresh(model)
+    return model
+
 @router.post("/providers/{provider_id}/sync_models")
 async def sync_models(provider_id: int, db: Session = Depends(get_db)):
     provider = db.query(models.Provider).filter(models.Provider.id == provider_id).first()
@@ -87,7 +97,8 @@ async def sync_models(provider_id: int, db: Session = Depends(get_db)):
                             provider_id=provider_id,
                             model_id=m_id,
                             name=m_id, # Default to ID, user can edit later
-                            is_reasoning=False
+                            is_reasoning=False,
+                            enabled=True
                         )
                         db.add(new_model)
                         added += 1
