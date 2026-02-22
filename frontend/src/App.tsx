@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router';
-import { Settings, MessageSquare, Plus } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
+import { Settings, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import ChatView from './components/ChatView';
 import SettingsView from './components/SettingsView';
 
 function Sidebar() {
   const [conversations, setConversations] = useState<any[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchConvs = () => {
@@ -21,6 +22,25 @@ function Sidebar() {
     // Simple polling or event listener could go here if needed,
     // but fetching on mount/location change is a coarse workaround.
   }, [location.pathname]);
+
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this conversation?')) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiUrl}/api/conversations/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setConversations(conversations.filter(c => c.id !== id));
+        if (location.pathname === `/c/${id}`) {
+          navigate('/');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete conversation', err);
+    }
+  };
 
   return (
     <div className="w-64 bg-[#16181d] border-r border-[#2d3139] flex flex-col transition-all duration-300">
@@ -43,9 +63,18 @@ function Sidebar() {
           <div className="text-sm text-gray-500 italic px-2">No history</div>
         )}
         {conversations.map(c => (
-          <Link key={c.id} to={`/c/${c.id}`} className={`flex items-center gap-2 p-2 hover:bg-[#2d3139] rounded cursor-pointer text-sm transition-colors ${location.pathname === `/c/${c.id}` ? 'bg-[#2d3139] text-white' : 'text-gray-300'}`}>
-            <MessageSquare size={16} className={`${location.pathname === `/c/${c.id}` ? 'text-blue-400' : 'text-gray-500'}`} />
-            <span className="truncate">{c.title}</span>
+          <Link key={c.id} to={`/c/${c.id}`} className={`group flex items-center justify-between p-2 hover:bg-[#2d3139] rounded cursor-pointer text-sm transition-colors ${location.pathname === `/c/${c.id}` ? 'bg-[#2d3139] text-white' : 'text-gray-300'}`}>
+            <div className="flex items-center gap-2 overflow-hidden flex-1">
+              <MessageSquare size={16} className={`flex-shrink-0 ${location.pathname === `/c/${c.id}` ? 'text-blue-400' : 'text-gray-500'}`} />
+              <span className="truncate">{c.title}</span>
+            </div>
+            <button
+              onClick={(e) => handleDelete(e, c.id)}
+              className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+              title="Delete Conversation"
+            >
+              <Trash2 size={14} />
+            </button>
           </Link>
         ))}
       </div>

@@ -127,6 +127,16 @@ def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conv
 
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    conv = db.query(models.Conversation).filter(models.Conversation.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    # Cascade delete is configured on the models, so this will delete messages too
+    db.delete(conv)
+    db.commit()
+    return {"status": "success"}
+
 @router.post("/messages/", response_model=schemas.Message)
 def create_message(msg: schemas.MessageCreate, db: Session = Depends(get_db)):
     db_msg = models.Message(**msg.model_dump())

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Send, Settings2, Cpu, Clock, Zap } from 'lucide-react';
+import { Send, Settings2, Cpu, Clock, Zap, Copy, Edit2, RotateCw } from 'lucide-react';
 
 export default function ChatView() {
     const { id } = useParams();
@@ -12,6 +12,8 @@ export default function ChatView() {
     const [allModels, setAllModels] = useState<any[]>([]);
     const [providers, setProviders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+    const [editContent, setEditContent] = useState('');
     const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
     // Fetch models and providers on mount
@@ -48,6 +50,62 @@ export default function ChatView() {
     useEffect(() => {
         endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    const handleCopy = (content: string) => {
+        navigator.clipboard.writeText(content);
+    };
+
+    const handleRegenerate = async (messageId: number) => {
+        if (!id) return;
+        setIsLoading(true);
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            const res = await fetch(`${apiUrl}/api/chat/regenerate/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message_id: messageId,
+                    system_prompt: systemPrompt
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMessages(data);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const submitEdit = async (messageId: number) => {
+        if (!id || selectedModels.length === 0) return;
+        setEditingMessageId(null);
+        setIsLoading(true);
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+            const res = await fetch(`${apiUrl}/api/chat/edit/`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversation_id: parseInt(id),
+                    models_to_use: selectedModels,
+                    message_id: messageId,
+                    new_content: editContent,
+                    system_prompt: systemPrompt
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMessages(data);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim() || selectedModels.length === 0) return;
@@ -154,38 +212,77 @@ export default function ChatView() {
                         <MessageEmptyState />
                     </div>
                 ) : (
-                    messages.map((msg, i) => (
-                        <div key={i} className={`flex max-w-4xl mx-auto ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`p-4 rounded-2xl max-w-[85%] ${msg.role === 'user' ? 'bg-blue-600 text-white shadow-md' : 'bg-[#1e2128] text-gray-200 border border-[#2d3139]'}`}>
-                                <div className="text-sm prose prose-invert max-w-none">{msg.content}</div>
-                                {/* Generation Metadata */}
-                                {msg.role === 'assistant' && msg.generation_metadata && (
-                                    <div className="mt-3 pt-3 flex flex-wrap gap-3 border-t border-[#2d3139]/50 text-xs">
-                                        {msg.generation_metadata.map((meta: any, mi: number) => {
-                                            const model = allModels.find(m => m.id === meta.model_id);
-                                            const provider = model ? providers.find(p => p.id === model.provider_id) : null;
-                                            return (
-                                                <div key={mi} className="bg-[#16181d] rounded px-2 py-1 flex items-center gap-3 border border-[#2d3139]">
-                                                    <span className="font-semibold text-blue-400">
-                                                        {provider ? `${provider.name} / ` : ''}{model?.name || 'Model'}
-                                                    </span>
-                                                    <span className="flex items-center gap-1 text-gray-400"><Clock size={10} /> {(meta.time_to_first_token || 0).toFixed(2)}s TTFT</span>
-                                                    <span className="flex items-center gap-1 text-gray-400"><Zap size={10} /> {(meta.tokens_per_second || 0).toFixed(1)} t/s</span>
-                                                    <span className="text-gray-400" title="Output Tokens">{meta.output_tokens} out tokens</span>
-                                                    {(meta.input_tokens !== null && meta.input_tokens !== undefined) && (
-                                                        <span className="text-gray-400" title="Input Tokens">
-                                                            {meta.input_tokens} in tokens
-                                                            {meta.cached_input_tokens ? ` (${meta.cached_input_tokens} cached)` : ''}
-                                                        </span>
-                                                    )}
+                    messages.map((msg, i) => {
+                        const isUser = msg.role === 'user';
+                        return (
+                            <div key={i} className={`flex max-w-4xl mx-auto mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`p-4 rounded-2xl max-w-[85%] relative ${isUser ? 'bg-blue-600 text-white shadow-md' : 'bg-[#1e2128] text-gray-200 border border-[#2d3139]'}`}>
+                                    {editingMessageId === msg.id ? (
+                                        <div className="flex flex-col gap-2">
+                                            <textarea
+                                                className="w-full bg-[#0f1115] text-white p-2 rounded resize-none focus:outline-none border border-blue-400"
+                                                rows={3}
+                                                value={editContent}
+                                                onChange={e => setEditContent(e.target.value)}
+                                            />
+                                            <div className="flex justify-end gap-2 mt-2">
+                                                <button onClick={() => setEditingMessageId(null)} className="text-xs text-gray-300 hover:text-white transition-colors">Cancel</button>
+                                                <button onClick={() => submitEdit(msg.id)} disabled={isLoading} className="text-xs bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors">Save & Submit</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm prose prose-invert max-w-none whitespace-pre-wrap">{msg.content}</div>
+                                    )}
+
+                                    <div className="flex items-center gap-3 mt-3 pt-2 text-xs">
+                                        {isUser ? (
+                                            <>
+                                                <span className="text-blue-200 opacity-70">You</span>
+                                                {!editingMessageId && (
+                                                    <div className="flex gap-3 ml-auto opacity-0 hover:opacity-100 transition-opacity absolute -bottom-6 right-0">
+                                                        <button onClick={() => handleCopy(msg.content)} className="text-gray-400 hover:text-white transition-colors flex items-center gap-1" title="Copy"><Copy size={12} /> Copy</button>
+                                                        <button onClick={() => { setEditingMessageId(msg.id); setEditContent(msg.content); }} className="text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1" title="Edit"><Edit2 size={12} /> Edit</button>
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="flex w-full flex-col gap-2">
+                                                {/* Generation Metadata */}
+                                                {msg.generation_metadata && (
+                                                    <div className="mt-1 flex flex-wrap gap-3 text-xs w-full">
+                                                        {msg.generation_metadata.map((meta: any, mi: number) => {
+                                                            const model = allModels.find(m => m.id === meta.model_id);
+                                                            const provider = model ? providers.find(p => p.id === model.provider_id) : null;
+                                                            return (
+                                                                <div key={mi} className="bg-[#16181d] rounded px-2 py-1 flex items-center gap-3 border border-[#2d3139]">
+                                                                    <span className="font-semibold text-blue-400">
+                                                                        {provider ? `${provider.name} / ` : ''}{model?.name || 'Model'}
+                                                                    </span>
+                                                                    <span className="flex items-center gap-1 text-gray-400"><Clock size={10} /> {(meta.time_to_first_token || 0).toFixed(2)}s TTFT</span>
+                                                                    <span className="flex items-center gap-1 text-gray-400"><Zap size={10} /> {(meta.tokens_per_second || 0).toFixed(1)} t/s</span>
+                                                                    <span className="text-gray-400" title="Output Tokens">{meta.output_tokens} out tokens</span>
+                                                                    {(meta.input_tokens !== null && meta.input_tokens !== undefined) && (
+                                                                        <span className="text-gray-400" title="Input Tokens">
+                                                                            {meta.input_tokens} in tokens
+                                                                            {meta.cached_input_tokens ? ` (${meta.cached_input_tokens} cached)` : ''}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-3 mt-1 pt-2 border-t border-[#2d3139]/50 text-xs w-full">
+                                                    <button onClick={() => handleCopy(msg.content)} className="text-gray-400 hover:text-white transition-colors flex items-center gap-1" title="Copy"><Copy size={12} /> Copy</button>
+                                                    <button onClick={() => handleRegenerate(msg.id)} disabled={isLoading} className="text-gray-400 hover:text-blue-400 disabled:opacity-50 transition-colors flex items-center gap-1 ml-auto" title="Regenerate"><RotateCw size={12} /> Regenerate</button>
                                                 </div>
-                                            )
-                                        })}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
                 <div ref={endOfMessagesRef} />
             </div>
