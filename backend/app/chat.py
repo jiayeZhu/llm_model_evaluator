@@ -31,22 +31,47 @@ async def fetch_llm_response(model_id: int, sys_prompt: str, history: List[dict]
         response = await client.chat.completions.create(
             model=model_name,
             messages=messages,
-            stream=True
+            stream=True,
+            extra_body={"stream_options": {"include_usage": True}}
         )
         
         full_content = ""
+        input_tokens = None
+        output_tokens = None
+        cached_input_tokens = None
+        
         async for chunk in response:
             if chunk.choices and len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta.content or ""
                 if ttft is None and delta:
                     ttft = time.time() - start_time
                 full_content += delta
+                
+            chunk_dict = chunk.model_dump() if hasattr(chunk, 'model_dump') else chunk.dict() if hasattr(chunk, 'dict') else getattr(chunk, '__dict__', {})
+            # Also check model_extra in case it's in extra fields
+            if hasattr(chunk, 'model_extra') and chunk.model_extra:
+                chunk_dict.update(chunk.model_extra)
+                
+            if 'usage' in chunk_dict and chunk_dict['usage']:
+                usage = chunk_dict['usage']
+                if isinstance(usage, dict):
+                    input_tokens = usage.get('prompt_tokens')
+                    output_tokens = usage.get('completion_tokens')
+                    details = usage.get('prompt_tokens_details', {})
+                    if details:
+                        cached_input_tokens = details.get('cached_tokens')
+                else:
+                    input_tokens = getattr(usage, 'prompt_tokens', None)
+                    output_tokens = getattr(usage, 'completion_tokens', None)
+                    details = getattr(usage, 'prompt_tokens_details', None)
+                    if details:
+                        cached_input_tokens = getattr(details, 'cached_tokens', None)
         
         end_time = time.time()
         
         total_time = end_time - start_time
-        # Rough token approximation if not provided by stream
-        estimated_output_tokens = len(full_content) / 4 
+        # Fallback to rough token approximation if not provided by stream
+        estimated_output_tokens = output_tokens if output_tokens is not None else (len(full_content) / 4)
         tps = estimated_output_tokens / (total_time - (ttft or 0)) if total_time > (ttft or 0) else 0
         
         return {
@@ -55,7 +80,9 @@ async def fetch_llm_response(model_id: int, sys_prompt: str, history: List[dict]
             "content": full_content,
             "ttft": ttft,
             "tps": tps,
-            "output_tokens": int(estimated_output_tokens)
+            "output_tokens": int(estimated_output_tokens),
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached_input_tokens
         }
     except Exception as e:
         print(f"Error fetching from model {model_name}: {e}")
@@ -65,11 +92,13 @@ async def fetch_llm_response(model_id: int, sys_prompt: str, history: List[dict]
             "content": f"Error: {str(e)}",
             "ttft": None,
             "tps": None,
-            "output_tokens": 0
+            "output_tokens": 0,
+            "input_tokens": None,
+            "cached_input_tokens": None
         }
 
 
-@router.post("/chat/")
+@router.post("/chat/", response_model=List[schemas.Message])
 async def chat_with_models(req: ChatRequest, db: Session = Depends(get_db)):
     conv = db.query(models.Conversation).filter(models.Conversation.id == req.conversation_id).first()
     if not conv:
@@ -125,6 +154,8 @@ async def chat_with_models(req: ChatRequest, db: Session = Depends(get_db)):
             time_to_first_token=res["ttft"],
             tokens_per_second=res["tps"],
             output_tokens=res["output_tokens"],
+            input_tokens=res.get("input_tokens"),
+            cached_input_tokens=res.get("cached_input_tokens")
         )
         db.add(meta)
     

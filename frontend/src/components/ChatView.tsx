@@ -171,7 +171,13 @@ export default function ChatView() {
                                                     </span>
                                                     <span className="flex items-center gap-1 text-gray-400"><Clock size={10} /> {(meta.time_to_first_token || 0).toFixed(2)}s TTFT</span>
                                                     <span className="flex items-center gap-1 text-gray-400"><Zap size={10} /> {(meta.tokens_per_second || 0).toFixed(1)} t/s</span>
-                                                    <span className="text-gray-400">{meta.output_tokens} out tokens</span>
+                                                    <span className="text-gray-400" title="Output Tokens">{meta.output_tokens} out tokens</span>
+                                                    {(meta.input_tokens !== null && meta.input_tokens !== undefined) && (
+                                                        <span className="text-gray-400" title="Input Tokens">
+                                                            {meta.input_tokens} in tokens
+                                                            {meta.cached_input_tokens ? ` (${meta.cached_input_tokens} cached)` : ''}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )
                                         })}
