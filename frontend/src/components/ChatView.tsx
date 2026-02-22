@@ -361,38 +361,40 @@ export default function ChatView() {
                 <div ref={endOfMessagesRef} />
             </div>
 
-            {/* Input Area */}
-            <div className="p-4 bg-[#16181d] border-t border-[#2d3139] shrink-0">
-                <div className="max-w-4xl mx-auto relative flex items-end bg-[#0f1115] border border-[#2d3139] rounded-xl focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 p-1 transition-all">
-                    <textarea
-                        className="w-full bg-transparent text-sm p-3 focus:outline-none resize-none max-h-48 text-gray-200"
-                        rows={1}
-                        placeholder="Type your message..."
-                        value={input}
-                        onChange={e => {
-                            setInput(e.target.value);
-                            e.target.style.height = 'auto';
-                            e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-                        }}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend();
-                            }
-                        }}
-                    />
-                    <button
-                        disabled={isLoading || !input.trim() || selectedModels.length === 0}
-                        onClick={handleSend}
-                        className="p-3 m-1 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:bg-[#2d3139] disabled:text-gray-500 transition-colors flex items-center justify-center"
-                    >
-                        <Send size={18} />
-                    </button>
+            {/* Input Area - Only show if no messages exist yet */}
+            {messages.length === 0 && (
+                <div className="p-4 border-t border-[#2d3139] bg-[#16181d] shrink-0 z-10 relative">
+                    <div className="max-w-4xl mx-auto relative flex items-end bg-[#0f1115] rounded-xl border border-[#2d3139] focus-within:border-blue-500 transition-colors p-2 shadow-sm">
+                        <textarea
+                            className="w-full bg-transparent text-white p-2 resize-none focus:outline-none min-h-[44px] max-h-[200px]"
+                            placeholder="Type your message..."
+                            rows={1}
+                            value={input}
+                            onChange={e => {
+                                setInput(e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                            }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend();
+                                }
+                            }}
+                        />
+                        <button
+                            onClick={handleSend}
+                            disabled={!input.trim() || selectedModels.length === 0 || isLoading}
+                            className="p-2.5 text-blue-500 hover:text-blue-400 disabled:text-gray-600 disabled:opacity-50 transition-colors shrink-0 mb-0.5"
+                        >
+                            <Send size={18} className={isLoading ? "animate-pulse" : ""} />
+                        </button>
+                    </div>
+                    {selectedModels.length === 0 && (
+                        <div className="text-center mt-2 text-xs text-red-400/80">Select at least one model before sending a message.</div>
+                    )}
                 </div>
-                <div className="max-w-4xl mx-auto mt-2 text-center text-xs text-gray-500">
-                    Select at least one model before sending a message.
-                </div>
-            </div>
+            )}
         </div>
     );
 }
