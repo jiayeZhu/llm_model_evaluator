@@ -1,1 +1,7 @@
 .vscode/
+.claude/
+.mcp.json
+
+# Python cache
+__pycache__/
+*.py[cod]
